@@ -1,3 +1,3 @@
 # LimeCache
 
-An attempt for implementing partial Guava cache in C++
+An concurrent expiring hashmap in Java
