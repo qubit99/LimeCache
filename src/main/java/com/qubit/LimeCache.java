@@ -11,6 +11,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
+
 public class LimeCache<K,V> implements ConcurrentMap<K,V> {
 
     static volatile ScheduledExecutorService cacheEvictionExecutor;
@@ -20,7 +21,8 @@ public class LimeCache<K,V> implements ConcurrentMap<K,V> {
     private final ReadWriteLock readWriteLock = new ReentrantReadWriteLock();
     private final Lock readLock = readWriteLock.readLock();
     private final Lock writeLock = readWriteLock.writeLock();
-    private LinkedHashMap<K, V> entryMap;
+    private LinkedHashMap<K, ExpiringEntry<K,V>> entryMap;
+    private LimeCacheLoader<K, V> limeCacheLoader;
 
     private LimeCache(final Builder<K, V> builder) {
         if (cacheEvictionExecutor == null) {
@@ -32,6 +34,11 @@ public class LimeCache<K,V> implements ConcurrentMap<K,V> {
             }
         }
         maxSize = builder.maxSize;
+        limeCacheLoader = builder.limeCacheLoader;
+    }
+
+    public static Builder<Object, Object> builder() {
+        return new Builder<>();
     }
 
     public static final class Builder<K, V> {
@@ -39,13 +46,15 @@ public class LimeCache<K,V> implements ConcurrentMap<K,V> {
         private boolean variableExpiration;
         private long duration = 60;
         private int maxSize = Integer.MAX_VALUE;
+        private LimeCacheLoader<K,V> limeCacheLoader;
 
         private Builder() {
         }
 
         @SuppressWarnings("unchecked")
-        public <K1 extends K, V1 extends V> LimeCache<K1, V1> build() {
-            return new LimeCache<>((Builder<K1, V1>) this);
+        public LimeCache<K, V> build() {
+            ExceptionHandler.checkInvalidArgument(limeCacheLoader !=null, "CacheLoader cannot be null");
+            return new LimeCache<>(this);
         }
 
         public Builder<K, V> expiration(long duration, TimeUnit timeUnit) {
@@ -60,6 +69,13 @@ public class LimeCache<K,V> implements ConcurrentMap<K,V> {
             this.maxSize = maxSize;
             return this;
         }
+
+        @SuppressWarnings("unchecked")
+        public<K1 extends K, V1 extends V> Builder<K1, V1> limeCacheLoader(LimeCacheLoader<? super K1, ? super V1> limeCacheLoader){
+            this.limeCacheLoader = (LimeCacheLoader<K, V>) limeCacheLoader;
+            return (Builder<K1, V1>) this;
+        }
+
 
     }
 
@@ -97,9 +113,9 @@ public class LimeCache<K,V> implements ConcurrentMap<K,V> {
     public V get(Object key) {
         readLock.lock();
         // read and return;
-        V value = entryMap.get(key);
+        ExpiringEntry<K,V> entry = entryMap.get(key);
         readLock.unlock();
-        return value;
+        return entry.value;
     }
 
     @Override
