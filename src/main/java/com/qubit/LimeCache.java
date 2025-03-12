@@ -5,6 +5,7 @@ import com.qubit.internal.NamedThreadFactory;
 
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -18,6 +19,9 @@ public class LimeCache<K,V> implements ConcurrentMap<K,V> {
     static ThreadFactory THREAD_FACTORY;
     transient int size;
     private final int maxSize;
+    // AtomicLong for threadSafe
+    private AtomicLong ttlNanos;
+    private ExpirationPolicy expirationPolicy;
     private final ReadWriteLock readWriteLock = new ReentrantReadWriteLock();
     private final Lock readLock = readWriteLock.readLock();
     private final Lock writeLock = readWriteLock.writeLock();
@@ -35,6 +39,7 @@ public class LimeCache<K,V> implements ConcurrentMap<K,V> {
         }
         maxSize = builder.maxSize;
         limeCacheLoader = builder.limeCacheLoader;
+        ttlNanos = new AtomicLong(TimeUnit.NANOSECONDS.convert(builder.duration, builder.timeUnit));
     }
 
     public static Builder<Object, Object> builder() {
@@ -43,7 +48,6 @@ public class LimeCache<K,V> implements ConcurrentMap<K,V> {
 
     public static final class Builder<K, V> {
         private TimeUnit timeUnit = TimeUnit.SECONDS;
-        private boolean variableExpiration;
         private long duration = 60;
         private int maxSize = Integer.MAX_VALUE;
         private LimeCacheLoader<K,V> limeCacheLoader;
@@ -120,7 +124,8 @@ public class LimeCache<K,V> implements ConcurrentMap<K,V> {
 
     @Override
     public V put(K key, V value) {
-        return null;
+        assert key!=null;
+        return putInLimeCache(key, value, expirationPolicy, ttlNanos.get());
     }
 
     @Override
@@ -181,5 +186,15 @@ public class LimeCache<K,V> implements ConcurrentMap<K,V> {
     @Override
     public V computeIfPresent(K key, BiFunction<? super K, ? super V, ? extends V> remappingFunction) {
         return ConcurrentMap.super.computeIfPresent(key, remappingFunction);
+    }
+
+    private V putInLimeCache(K key, V value, ExpirationPolicy expirationPolicy, long ttl) {
+        writeLock.lock();
+        try {
+
+            return null;
+        } finally {
+            writeLock.unlock();
+        }
     }
 }

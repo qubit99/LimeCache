@@ -12,6 +12,8 @@ public class Main {
                     }
                 } )
                 .build();
+
+        limeCache.containsKey("1");
     }
 
 
